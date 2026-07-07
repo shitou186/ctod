@@ -8,13 +8,14 @@ from morecantile import TileMatrixSet
 from ctod.server.queries import QueryParameters
 
 
-def generate_layer_json(tms: TileMatrixSet, qp: QueryParameters) -> str:
+def generate_layer_json(tms: TileMatrixSet, qp: QueryParameters, cache_grid_dir: str = None) -> str:
     """Dynamically generate a layer.json for Cesium based on input file.
 
     Args:
         tms (TileMatrixSet): The TileMatrixSet to use
         file_path (str): Path to the dataset
         max_zoom (int, optional): Maximum zoom levels to generate info for. Defaults to 20.
+        cache_grid_dir (str, optional): Path to the cache grid directory
 
     Returns:
         str: JSON string of the layer.json
@@ -23,13 +24,13 @@ def generate_layer_json(tms: TileMatrixSet, qp: QueryParameters) -> str:
     type = get_dataset_type(qp.get_cog())
 
     if type == "mosaic":
-        return _generate_ctod_layer_json(tms, qp)
+        return _generate_ctod_layer_json(tms, qp, cache_grid_dir)
 
-    return _generate_default_layer_json(tms, qp)
+    return _generate_default_layer_json(tms, qp, cache_grid_dir)
 
 
 def _generate_default_layer_json(
-    tms: TileMatrixSet, qp: QueryParameters
+    tms: TileMatrixSet, qp: QueryParameters, cache_grid_dir: str = None
 ) -> str:
     """Dynamically generate a layer.json for Cesium based on input file.
 
@@ -37,18 +38,30 @@ def _generate_default_layer_json(
         tms (TileMatrixSet): The TileMatrixSet to use
         file_path (str): Path to the dataset
         max_zoom (int, optional): Maximum zoom levels to generate info for. Defaults to 20.
+        cache_grid_dir (str, optional): Path to the cache grid directory
 
     Returns:
         str: JSON string of the layer.json
     """
 
+    min_z = None
+    max_z = None
+
     with COGReader(qp.get_cog()) as src:
         bounds = src.geographic_bounds
-        return _create_json(bounds, tms, qp)
+
+        try:
+            tags = src.dataset.tags(1)
+            min_z = float(tags.get('STATISTICS_MINIMUM'))
+            max_z = float(tags.get('STATISTICS_MAXIMUM'))
+        except (TypeError, ValueError, AttributeError):
+            pass
+
+        return _create_json(bounds, tms, qp, min_z, max_z, cache_grid_dir)
 
 
 def _generate_ctod_layer_json(
-    tms: TileMatrixSet, qp: QueryParameters
+    tms: TileMatrixSet, qp: QueryParameters, cache_grid_dir: str = None
 ) -> str:
     """Dynamically generate a layer.json for Cesium based on input file.
 
@@ -56,6 +69,7 @@ def _generate_ctod_layer_json(
         tms (TileMatrixSet): The TileMatrixSet to use
         file_path (str): Path to the dataset or URL
         max_zoom (int, optional): Maximum zoom levels to generate info for. Defaults to 20.
+        cache_grid_dir (str, optional): Path to the cache grid directory
 
     Returns:
         str: JSON string of the layer.json
@@ -71,16 +85,19 @@ def _generate_ctod_layer_json(
         with open(cog) as file:
             datasets_json = json.load(file)
 
-    return _create_json(datasets_json["extent"], tms, qp)
+    return _create_json(datasets_json["extent"], tms, qp, None, None, cache_grid_dir)
 
 
-def _create_json(bounds: list, tms: TileMatrixSet, qp: QueryParameters) -> str:
+def _create_json(bounds: list, tms: TileMatrixSet, qp: QueryParameters, min_z: float = None, max_z: float = None, cache_grid_dir: str = None) -> str:
     """Create the layer.json
 
     Args:
         bounds (list): Bounds of the full dataset [left, bottom, right, top]
         tms (TileMatrixSet): The TileMatrixSet to use
         max_zoom (int): Maximum zoom levels to generate info for
+        min_z (float, optional): Minimum elevation value from STATISTICS_MINIMUM
+        max_z (float, optional): Maximum elevation value from STATISTICS_MAXIMUM
+        cache_grid_dir (str, optional): Path to the cache grid directory
 
     Returns:
         str: JSON string of the layer.json
@@ -120,6 +137,9 @@ def _create_json(bounds: list, tms: TileMatrixSet, qp: QueryParameters) -> str:
         "projection": "EPSG:4326",
         "bounds": [0.00, -90.00, 180.00, 90.00],
         "cogBounds": bounds,
+        "min_z": min_z,
+        "max_z": max_z,
+        "cacheGrid": cache_grid_dir,
         "available": available_tiles,
     }
 

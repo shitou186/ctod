@@ -1,5 +1,6 @@
 import os
 import ctod.server.queries as queries
+import ctod.server.raster_queries as raster_queries
 import logging
 
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from ctod.core.cog.cog_reader_pool import CogReaderPool
 from ctod.core.factory.terrain_factory import TerrainFactory
 from ctod.server.handlers.layer import get_layer_json
 from ctod.server.handlers.terrain import TerrainHandler
+from ctod.server.handlers.raster import RasterTileHandler
 from ctod.server.settings import Settings
 from ctod.server.startup import patch_occlusion, setup_logging, log_ctod_start
 from fastapi import FastAPI, Request
@@ -62,6 +64,7 @@ app = FastAPI(
     summary="CTOD fetches Cesium terrain tiles from Cloud Optimized GeoTIFFs dynamically, avoiding extensive caching to save time and storage space. By generating tiles on demand, it optimizes efficiency and reduces resource consumption compared to traditional caching methods.",
     version="1.0.1",
     debug=False,
+    root_path="/terrain-service",
 )
 
 app.add_middleware(
@@ -144,7 +147,7 @@ def layer_json(
         noData
     )
 
-    return get_layer_json(globals["tms"], params)
+    return get_layer_json(globals["tms"], params, globals["tile_cache_path"])
 
 
 @app.get(
@@ -160,7 +163,163 @@ def layer_json(
     if queryParams is None:
         return JSONResponse(status_code=404, content={"message": "Dataset not found"})
 
-    return get_layer_json(globals["tms"], queryParams)
+    return get_layer_json(globals["tms"], queryParams, globals["tile_cache_path"])
+
+
+@app.get(
+    "/tiles/dynamic/raster/{z}/{x}/{y}.png",
+    summary="Get a rendered raster tile",
+    description="Generates and returns a color-ramped hillshade PNG from a COG",
+)
+async def raster_tile(
+    z: int,
+    x: int,
+    y: int,
+    cog: str = queries.query_cog,
+    resamplingMethod: str = queries.query_resampling_method,
+    skipCache: bool = queries.query_skip_cache,
+    noData: int = queries.query_no_data,
+    minHeight: float = raster_queries.query_min_height,
+    maxHeight: float = raster_queries.query_max_height,
+    lightAzimuth: float = raster_queries.query_light_azimuth,
+    lightAltitude: float = raster_queries.query_light_altitude,
+    verticalExaggeration: float = raster_queries.query_vertical_exaggeration,
+    shadeStrength: float = raster_queries.query_shade_strength,
+    shadeContrast: float = raster_queries.query_shade_contrast,
+    hillshadeBlend: float = raster_queries.query_hillshade_blend,
+    atlasShadowPower: float = raster_queries.query_atlas_shadow_power,
+    ambient: float = raster_queries.query_ambient,
+    baseBrightness: float = raster_queries.query_base_brightness,
+    gamma: float = raster_queries.query_gamma,
+    saturation: float = raster_queries.query_saturation,
+    shadowCutoff: float = raster_queries.query_shadow_cutoff,
+    highlightCutoff: float = raster_queries.query_highlight_cutoff,
+    rampStops: str = raster_queries.query_ramp_stops,
+    buffer: int = raster_queries.query_buffer,
+    flipY: bool = raster_queries.query_flip_y,
+    waterColor: str = raster_queries.query_water_color,
+    valleyColor: str = raster_queries.query_valley_color,
+    lowColor: str = raster_queries.query_low_color,
+    middleColor: str = raster_queries.query_middle_color,
+    highColor: str = raster_queries.query_high_color,
+    peakColor: str = raster_queries.query_peak_color,
+):
+    if globals["no_dynamic"]:
+        return JSONResponse(status_code=404, content={"message": "Dynamic tiles are disabled"})
+
+    params = queries.QueryParameters(
+        cog=cog,
+        resamplingMethod=resamplingMethod,
+        skipCache=skipCache,
+        noData=noData,
+    )
+    style = raster_queries.RasterQueryParameters(
+        minHeight=minHeight,
+        maxHeight=maxHeight,
+        noData=params.get_no_data(),
+        lightAzimuth=lightAzimuth,
+        lightAltitude=lightAltitude,
+        verticalExaggeration=verticalExaggeration,
+        shadeStrength=shadeStrength,
+        shadeContrast=shadeContrast,
+        hillshadeBlend=hillshadeBlend,
+        atlasShadowPower=atlasShadowPower,
+        ambient=ambient,
+        baseBrightness=baseBrightness,
+        gamma=gamma,
+        saturation=saturation,
+        shadowCutoff=shadowCutoff,
+        highlightCutoff=highlightCutoff,
+        rampStops=rampStops,
+        buffer=buffer,
+        flipY=flipY,
+        waterColor=waterColor,
+        valleyColor=valleyColor,
+        lowColor=lowColor,
+        middleColor=middleColor,
+        highColor=highColor,
+        peakColor=peakColor,
+    ).to_style()
+
+    handler = RasterTileHandler(
+        cog_reader_pool=globals["cog_reader_pool"],
+        tile_cache_path=globals["tile_cache_path"],
+    )
+    return await handler.get(globals["tms"], z, x, y, params, style)
+
+
+@app.get(
+    "/tiles/{dataset}/raster/{z}/{x}/{y}.png",
+    summary="Get a rendered raster tile for a configured dataset",
+    description="Generates and returns a color-ramped hillshade PNG for a configured dataset",
+)
+async def dataset_raster_tile(
+    dataset: str,
+    z: int,
+    x: int,
+    y: int,
+    minHeight: float = raster_queries.query_min_height,
+    maxHeight: float = raster_queries.query_max_height,
+    lightAzimuth: float = raster_queries.query_light_azimuth,
+    lightAltitude: float = raster_queries.query_light_altitude,
+    verticalExaggeration: float = raster_queries.query_vertical_exaggeration,
+    shadeStrength: float = raster_queries.query_shade_strength,
+    shadeContrast: float = raster_queries.query_shade_contrast,
+    hillshadeBlend: float = raster_queries.query_hillshade_blend,
+    atlasShadowPower: float = raster_queries.query_atlas_shadow_power,
+    ambient: float = raster_queries.query_ambient,
+    baseBrightness: float = raster_queries.query_base_brightness,
+    gamma: float = raster_queries.query_gamma,
+    saturation: float = raster_queries.query_saturation,
+    shadowCutoff: float = raster_queries.query_shadow_cutoff,
+    highlightCutoff: float = raster_queries.query_highlight_cutoff,
+    rampStops: str = raster_queries.query_ramp_stops,
+    buffer: int = raster_queries.query_buffer,
+    flipY: bool = raster_queries.query_flip_y,
+    waterColor: str = raster_queries.query_water_color,
+    valleyColor: str = raster_queries.query_valley_color,
+    lowColor: str = raster_queries.query_low_color,
+    middleColor: str = raster_queries.query_middle_color,
+    highColor: str = raster_queries.query_high_color,
+    peakColor: str = raster_queries.query_peak_color,
+):
+    queryParams = globals["dataset_config"].get_dataset(dataset)
+    if queryParams is None:
+        return JSONResponse(status_code=404, content={"message": "Dataset not found"})
+
+    style = raster_queries.RasterQueryParameters(
+        minHeight=minHeight,
+        maxHeight=maxHeight,
+        noData=queryParams.get_no_data(),
+        lightAzimuth=lightAzimuth,
+        lightAltitude=lightAltitude,
+        verticalExaggeration=verticalExaggeration,
+        shadeStrength=shadeStrength,
+        shadeContrast=shadeContrast,
+        hillshadeBlend=hillshadeBlend,
+        atlasShadowPower=atlasShadowPower,
+        ambient=ambient,
+        baseBrightness=baseBrightness,
+        gamma=gamma,
+        saturation=saturation,
+        shadowCutoff=shadowCutoff,
+        highlightCutoff=highlightCutoff,
+        rampStops=rampStops,
+        buffer=buffer,
+        flipY=flipY,
+        waterColor=waterColor,
+        valleyColor=valleyColor,
+        lowColor=lowColor,
+        middleColor=middleColor,
+        highColor=highColor,
+        peakColor=peakColor,
+    ).to_style()
+
+    handler = RasterTileHandler(
+        cog_reader_pool=globals["cog_reader_pool"],
+        tile_cache_path=globals["tile_cache_path"],
+    )
+    return await handler.get(globals["tms"], z, x, y, queryParams, style)
 
 
 @app.get(
