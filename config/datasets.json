@@ -1,16 +1,24 @@
 {
-    "datasets": [
-        {
-            "name": "demo",
-            "options": {
-                "cog": "./ctod/files/test_cog.tif",
-                "minZoom": 13,
-                "maxZoom": 17,
-                "noData": 0,
-                "meshingMethod": "grid",
-                "skipCache": false,
-                "zoomGridSizes": {"13": 5, "14": 10, "15": 15, "16": 20, "17": 25, "18": 30, "19": 35}
-            }
+  "datasets": [
+    {
+      "name": "GF7_DLC_E110.6_N32.7_20250111_DEM0001829881-BWDPAN",
+      "options": {
+        "cog": "/home/shilei/source-data/tiff/GF7_DLC_E110.6_N32.7_20250111_DEM0001829881-BWDPAN.tif",
+        "minZoom": 0,
+        "maxZoom": 16,
+        "noData": 0,
+        "meshingMethod": "grid",
+        "skipCache": false,
+        "zoomGridSizes": {
+          "13": 5,
+          "14": 10,
+          "15": 15,
+          "16": 20,
+          "17": 25,
+          "18": 30,
+          "19": 35
         }
-    ]
+      }
+    }
+  ]
 }

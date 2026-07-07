@@ -11,9 +11,10 @@ __pycache__/
 
 # C extensions
 *.so
-
+*.tar
 # Distribution / packaging
 .Python
+.mimocode/
 build/
 develop-eggs/
 dist/
