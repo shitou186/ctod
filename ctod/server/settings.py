@@ -43,7 +43,7 @@ class Settings:
             "CTOD_DB_NAME", "factory_cache.db")
         self.cors_allow_origins = args.cors_allow_origins or os.getenv(
             "CTOD_CORS_ALLOW_ORIGINS", "http://localhost:5000")
-        self.port = args.port or int(os.getenv("CTOD_PORT", 5000))
+        self.port = int(args.port) if args.port else int(os.getenv("CTOD_PORT", 5000))
 
         # Handle boolean flags
         self.dev = args.dev if args.dev else os.getenv(

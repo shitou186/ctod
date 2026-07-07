@@ -133,8 +133,17 @@ class CogReader:
         dataset_width = self.rio_reader.dataset.width
         dataset_wgs_width = dataset_bounds.right - dataset_bounds.left
         pixels_per_wgs = dataset_width / dataset_wgs_width
-        pixels_per_tile_downsampled = 256 * \
-            max(self.rio_reader.dataset.overviews(1))
+        overviews = self.rio_reader.dataset.overviews(1)
+
+        if not overviews:
+            if self.unsafe:
+                self.safe_level = 23
+                return
+            else:
+                raise ValueError(
+                    "The dataset has no Overviews. Use --unsafe to load anyway.")
+
+        pixels_per_tile_downsampled = 256 * max(overviews)
 
         for z in range(0, 24):
             tile_bounds = self.tms.xy_bounds(Tile(x=0, y=0, z=z))

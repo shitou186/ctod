@@ -1,3 +1,4 @@
+import hashlib
 import os
 import aiofiles
 
@@ -16,8 +17,10 @@ def get_root_folder(path: str, cog: str, meshing_method: str) -> str:
         str: path to the root folder
     """
 
-    cog = cog.encode("utf-8").hex()
-    return os.path.join(path, cog, meshing_method)
+    filename = os.path.basename(cog)
+    hash_suffix = hashlib.md5(cog.encode("utf-8")).hexdigest()[:8]
+    cache_key = f"{filename}_{hash_suffix}"
+    return os.path.join(path, cache_key, meshing_method)
 
 def get_tile_path(path: str, cog: str, meshing_method: str, z: int, x: int) -> str:
     """Get the path to the tile folder
