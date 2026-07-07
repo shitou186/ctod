@@ -17,7 +17,7 @@ docker run -p 5000:5000 \
 ghcr.io/sogelink-research/ctod:latest
 ```
 
-[Open the local running demo viewer](http://localhost:5000)
+[Open the local running demo viewer](http://localhost:5000/terrain-service/)
 
 ## Features
 
@@ -33,6 +33,10 @@ ghcr.io/sogelink-research/ctod:latest
 - Basic Cesium viewer included for debugging and result visualization.
 - Scripts to partly seed cache and generate mosaic dataset.
 - Works with Cesium for Unity
+- **New:** Raster tile rendering with hillshade and color ramp support
+- **New:** layer.json includes min_z/max_z elevation stats and cacheGrid path
+- **New:** layer.json disk caching for improved performance
+- **New:** All endpoints prefixed with `/terrain-service`
 
 ## Wiki
 
@@ -76,13 +80,29 @@ Run CTOD using docker or from source, see `Settings` for configuration options.
 
 ### Using Docker
 
-Example running CTOD using the docker image with a mounted volume and caching enabled.
+#### Build locally
+
+```sh
+./docker-build.sh v1.0.0
+```
+
+#### Run with Docker
 
 ```sh
 docker run -p 5000:5000 \
--v ./ctod_cache:/cache \
--e CTOD_TILE_CACHE_PATH=/cache \
-ghcr.io/sogelink-research/ctod:latest
+  -v /path/to/cache:/cache \
+  -v /path/to/data:/data \
+  ctod:v1.0.0 --port 5000 --tile-cache-path /cache --unsafe
+```
+
+#### Run with environment variables
+
+```sh
+docker run -p 5000:5000 \
+  -v /path/to/cache:/cache \
+  -e CTOD_TILE_CACHE_PATH=/cache \
+  -e CTOD_LOGGING_LEVEL=info \
+  ctod:v1.0.0 --unsafe
 ```
 
 ### From source
@@ -102,6 +122,12 @@ To enable caching, supply --tile-cache-path `path` with the start command.
 poetry run start --tile-cache-path ./ctod_cache
 ```
 
+Or use the start.sh script:
+
+```sh
+./start.sh --cache-dir ./ctod_cache --unsafe
+```
+
 ## --no-dynamic
 
 The idea is that an user can use every COG that the CTOD service can access with the parameters the user wants, this can expose a problem when CTOD is available on the internet. A random user can use your CTOD instance to generate his own .terrain tiles or even mess up a cache by supplying weird grid sized. 
@@ -112,43 +138,43 @@ The dynamic endpoint can be disabled by supplying the option `--no-dynamic` to C
 
 ## Endpoints
 
-Endpoint documentation for your running CTOD service can also be found under `/doc`.
+Endpoint documentation for your running CTOD service can also be found under `/terrain-service/docs`.
 
-### Endpoint: `/`
+### Endpoint: `/terrain-service/`
 
 Shows the available datasets and a link to open a preview viewer using the dataset.
 
 #### Request
 
 - **Method:** GET
-- **URL:** `http://localhost:5000`
+- **URL:** `http://localhost:5000/terrain-service/`
 
-### Endpoint: `/docs`
+### Endpoint: `/terrain-service/docs`
 
 The CTOD OpenAPI documentation with Swagger UI
 
 #### Request
 
 - **Method:** GET
-- **URL:** `http://localhost:5000/docs`
+- **URL:** `http://localhost:5000/terrain-service/docs`
 
-### Endpoint: `/status`
+### Endpoint: `/terrain-service/status`
 
 Can be used to check if CTOD is online
 
 #### Request
 
 - **Method:** GET
-- **URL:** `http://localhost:5000/status`
+- **URL:** `http://localhost:5000/terrain-service/status`
 
-### Endpoint: `/tiles/dynamic/layer.json`
+### Endpoint: `/terrain-service/tiles/dynamic/layer.json`
 
 Dynamically generates a layer.json based on the COG. The supplied parameters will be picked up by Cesium when using this url for the CesiumTerrainProvider and passed down to the .terrain requests.
 
 #### Request
 
 - **Method:** GET
-- **URL:** `http://localhost:5000/tiles/dynamic/layer.json`
+- **URL:** `http://localhost:5000/terrain-service/tiles/dynamic/layer.json`
 
 #### Parameters <a name="parameters-sub"></a>
 
@@ -157,32 +183,32 @@ See [Parameters](#parameters)
 #### Example
 
 ```sh
-http://localhost:5000/tiles/dynamic/layer.json?maxZoom=18&cog=./ctod/files/test_cog.tif
+http://localhost:5000/terrain-service/tiles/dynamic/layer.json?maxZoom=18&cog=./ctod/files/test_cog.tif
 ```
 
-### Endpoint: `/tiles/{dataset}/layer.json`
+### Endpoint: `/terrain-service/tiles/{dataset}/layer.json`
 
 Dynamically generates a layer.json for a configured dataset, replace {dataset} with a dataset configured in `datasets.json`, all supplied url parameters will be ignored.
 
 #### Request
 
 - **Method:** GET
-- **URL:** `http://localhost:5000/tiles/{dataset}/layer.json`
+- **URL:** `http://localhost:5000/terrain-service/tiles/{dataset}/layer.json`
 
 #### Example
 
 ```sh
-http://localhost:5000/tiles/demo/layer.json
+http://localhost:5000/terrain-service/tiles/demo/layer.json
 ```
 
-### Endpoint: `/tiles/dynamic/{z}/{x}/{y}.terrain`
+### Endpoint: `/terrain-service/tiles/dynamic/{z}/{x}/{y}.terrain`
 
 Get a quantized mesh for tile index z, x, y. Set the minZoom value to retrieve empty tiles for zoom levels lower than minZoom. maxZoom is handled in the generated layer.json.
 
 #### Request
 
 - **Method:** GET
-- **URL:** `http://localhost:5000/tiles/dynamic/{z}/{x}/{y}.terrain`
+- **URL:** `http://localhost:5000/terrain-service/tiles/dynamic/{z}/{x}/{y}.terrain`
 
 #### Parameters <a name="parameters-sub"></a>
 
@@ -191,22 +217,59 @@ See [Parameters](#parameters)
 #### Example
 
 ```sh
-http://localhost:5000/tiles/dynamic/17/134972/21614.terrain?minZoom=1&cog=./ctod/files/test_cog.tif
+http://localhost:5000/terrain-service/tiles/dynamic/17/134972/21614.terrain?minZoom=1&cog=./ctod/files/test_cog.tif
 ```
 
-### Endpoint: `/tiles/{dataset}/{z}/{x}/{y}.terrain`
+### Endpoint: `/terrain-service/tiles/{dataset}/{z}/{x}/{y}.terrain`
 
 Get a quantized mesh for tile index z, x, y. Replace {dataset} with a dataset configured in `datasets.json`, all supplied url parameters will be ignored.
 
 #### Request
 
 - **Method:** GET
-- **URL:** `http://localhost:5000/tiles/{dataset}/{z}/{x}/{y}.terrain`
+- **URL:** `http://localhost:5000/terrain-service/tiles/{dataset}/{z}/{x}/{y}.terrain`
 
 #### Example
 
 ```sh
-http://localhost:5000/tiles/demo/17/134972/21614.terrain
+http://localhost:5000/terrain-service/tiles/demo/17/134972/21614.terrain
+```
+
+### Endpoint: `/terrain-service/tiles/dynamic/raster/{z}/{x}/{y}.png`
+
+Get a rendered raster tile with hillshade and color ramp. Returns a PNG image.
+
+#### Request
+
+- **Method:** GET
+- **URL:** `http://localhost:5000/terrain-service/tiles/dynamic/raster/{z}/{x}/{y}.png`
+
+#### Parameters
+
+- **cog**: Path or URL to COG file.
+- **minHeight**: Minimum height for color ramp.
+- **maxHeight**: Maximum height for color ramp.
+- **noData**: The value to use for NoData in COG. Default (0)
+- **resamplingMethod**: Resampling method for COG. Default 'none'
+- **skipCache**: Set to true to prevent loading tiles from the cache. Default (False)
+- **lightAzimuth**: Light azimuth angle for hillshade. Default (315.0)
+- **lightAltitude**: Light altitude angle for hillshade. Default (45.0)
+- **verticalExaggeration**: Vertical exaggeration factor. Default (3.2)
+- **shadeStrength**: Hillshade strength. Default (1.0)
+- **shadeContrast**: Hillshade contrast. Default (1.2)
+- **gamma**: Gamma correction. Default (1.08)
+- **saturation**: Color saturation. Default (1.25)
+- **waterColor**: Color for water areas. Default (#0025fe)
+- **valleyColor**: Color for valleys. Default (#04fe00)
+- **lowColor**: Color for low areas. Default (#c5fe00)
+- **middleColor**: Color for middle areas. Default (#febb00)
+- **highColor**: Color for high areas. Default (#fe5a00)
+- **peakColor**: Color for peaks. Default (#fe0000)
+
+#### Example
+
+```sh
+http://localhost:5000/terrain-service/tiles/dynamic/raster/17/134972/21614.png?cog=./ctod/files/test_cog.tif&minHeight=0&maxHeight=1000
 ```
 
 ### Parameters <a name="parameters"></a>
@@ -275,7 +338,30 @@ viewer.terrainProvider = new Cesium.CesiumTerrainProvider({
 
 ### Caching
 
-The CTOD service has a very basic tile caching option, tiles can be retrieved and saved by supplying a cache path when starting app.py or setting the environment variable `CTOD_TILE_CACHE_PATH`. Based on this path and the requested cog, meshing method and resampling method a tile can be saved and retrieved from disk. the cog path/url will be encoded into a hex string. When a service is started with caching the cache can be circumvented by adding `ignoreCache=True` to the terrain request.
+The CTOD service has a tile caching option. Tiles can be retrieved and saved by supplying a cache path when starting the service or setting the environment variable `CTOD_TILE_CACHE_PATH`.
+
+#### Cache directory structure
+
+```
+<tile-cache-path>/
+  └── <filename>_<hash8>/
+      └── <meshingMethod>/
+          ├── layer.json
+          └── <z>/<x>/<y>.terrain
+```
+
+Where:
+- `<filename>`: Original COG filename
+- `<hash8>`: First 8 characters of MD5 hash of the full COG path
+- `<meshingMethod>`: The meshing method used (grid, martini, delatin)
+
+#### layer.json caching
+
+layer.json is cached alongside terrain tiles. The cache is invalidated when COG path or meshing method changes.
+
+#### Skip cache
+
+When a service is started with caching, the cache can be circumvented by adding `skipCache=True` to the terrain request.
 
 ### Nodata
 
