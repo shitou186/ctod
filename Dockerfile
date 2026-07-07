@@ -15,17 +15,20 @@ ENV VSI_CACHE=TRUE
 COPY pyproject.toml poetry.lock /app/
 COPY ./ctod /app/ctod/
 COPY ./scripts /app/scripts/
+COPY ./config /app/config/
 COPY start_server.py /app/
 
 RUN apt-get update \
-    && apt-get install -y gcc \
-    && pip install poetry \
+    && apt-get install -y gcc libexpat1 libgdal36 libgeos-dev libproj-dev \
+        libglm-dev libxml2-dev libxslt1-dev cmake \
+    && pip install --no-cache-dir poetry \
     && poetry config virtualenvs.create false \
-    && poetry install --no-dev \
-    && apt-get remove -y gcc \
+    && poetry install --only main --no-root \
+    && pip install --no-cache-dir "numpy<2" \
+    && apt-get remove -y gcc cmake \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 5000
 
-CMD ["python", "start_server.py"]
+ENTRYPOINT ["python", "start_server.py"]
